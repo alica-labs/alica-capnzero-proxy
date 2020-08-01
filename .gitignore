@@ -30,3 +30,11 @@
 *.exe
 *.out
 *.app
+
+# Ignore clion stuff
+**/.idea
+**/cmake-build-debug/
+
+# Ignore generated capnproto code
+*.capnp.h
+*.capnp.c++
