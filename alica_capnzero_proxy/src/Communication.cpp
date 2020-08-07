@@ -23,7 +23,7 @@
 #include <engine/containers/SyncTalk.h>
 #include <engine/teammanager/TeamManager.h>
 
-#include <SystemConfig.h>
+#include <essentials/SystemConfig.h>
 
 #include <capnp/common.h>
 #include <capnp/message.h>
@@ -40,17 +40,16 @@ namespace alica_capnzero_proxy
 using std::make_shared;
 using std::string;
 
-Communication::Communication(alica::AlicaEngine* ae)
-        : IAlicaCommunication(ae)
+Communication::Communication(alica::AlicaEngine& ae, essentials::IDManager& idManager)
+        : IAlicaCommunication(ae, idManager)
+        , sc(essentials::SystemConfig::getInstance())
 {
     this->isRunning = false;
 
-    this->sc = essentials::SystemConfig::getInstance();
-
     // Create zmq context
     this->ctx = zmq_ctx_new();
-    this->url = (*sc)["AlicaCapnzProxy"]->get<std::string>("Communication.URL", NULL);
-    int tp = (*sc)["AlicaCapnzProxy"]->get<int>("Communication.transport", NULL);
+    this->url = sc["AlicaCapnzProxy"]->get<std::string>("Communication.URL", NULL);
+    int tp = sc["AlicaCapnzProxy"]->get<int>("Communication.transport", NULL);
     switch (tp) {
     case 0:
         this->protocol = capnzero::Protocol::UDP;
@@ -64,13 +63,15 @@ Communication::Communication(alica::AlicaEngine* ae)
     }
 
     // Find topics:
-    this->allocationAuthorityInfoTopic = (*sc)["AlicaCapnzProxy"]->get<std::string>("Topics.allocationAuthorityInfoTopic", NULL);
-    this->ownRoleTopic = (*sc)["AlicaCapnzProxy"]->get<std::string>("Topics.ownRoleTopic", NULL);
-    this->alicaEngineInfoTopic = (*sc)["AlicaCapnzProxy"]->get<std::string>("Topics.alicaEngineInfoTopic", NULL);
-    this->planTreeInfoTopic = (*sc)["AlicaCapnzProxy"]->get<std::string>("Topics.planTreeInfoTopic", NULL);
-    this->syncReadyTopic = (*sc)["AlicaCapnzProxy"]->get<std::string>("Topics.syncReadyTopic", NULL);
-    this->syncTalkTopic = (*sc)["AlicaCapnzProxy"]->get<std::string>("Topics.syncTalkTopic", NULL);
-    this->solverResultTopic = (*sc)["AlicaCapnzProxy"]->get<std::string>("Topics.solverResultTopic", NULL);
+    this->allocationAuthorityInfoTopic = sc["AlicaCapnzProxy"]->get<std::string>("Topics.allocationAuthorityInfoTopic", NULL);
+    this->ownRoleTopic = sc["AlicaCapnzProxy"]->get<std::string>("Topics.ownRoleTopic", NULL);
+    this->alicaEngineInfoTopic = sc["AlicaCapnzProxy"]->get<std::string>("Topics.alicaEngineInfoTopic", NULL);
+    this->planTreeInfoTopic = sc["AlicaCapnzProxy"]->get<std::string>("Topics.planTreeInfoTopic", NULL);
+    this->syncReadyTopic = sc["AlicaCapnzProxy"]->get<std::string>("Topics.syncReadyTopic", NULL);
+    this->syncTalkTopic = sc["AlicaCapnzProxy"]->get<std::string>("Topics.syncTalkTopic", NULL);
+    this->solverResultTopic = sc["AlicaCapnzProxy"]->get<std::string>("Topics.solverResultTopic", NULL);
+    this->agentQueryTopic = sc["AlicaCapnzProxy"]->get<std::string>("Topics.agentQueryTopic", NULL);
+    this->agentAnnouncementTopic = sc["AlicaCapnzProxy"]->get<std::string>("Topics.agentAnnouncementTopic", NULL);
 
     // Setup publishers:
     this->alicaPub = new capnzero::Publisher(this->ctx, capnzero::Protocol::UDP);
@@ -90,6 +91,10 @@ Communication::Communication(alica::AlicaEngine* ae)
     this->syncTalkSub->setTopic(this->syncTalkTopic);
     this->solverResultSub = new capnzero::Subscriber(this->ctx, capnzero::Protocol::UDP);
     this->solverResultSub->setTopic(this->solverResultTopic);
+    this->agentQuerySub = new capnzero::Subscriber(this->ctx, capnzero::Protocol::UDP);
+    this->agentQuerySub->setTopic(this->agentQueryTopic);
+    this->agentAnnouncementSub = new capnzero::Subscriber(this->ctx, capnzero::Protocol::UDP);
+    this->agentAnnouncementSub->setTopic(this->agentAnnouncementTopic);
 
     // connecting the subscribers:
     this->allocationAuthorityInfoSub->addAddress(this->url);
@@ -97,6 +102,8 @@ Communication::Communication(alica::AlicaEngine* ae)
     this->syncReadySub->addAddress(this->url);
     this->syncTalkSub->addAddress(this->url);
     this->solverResultSub->addAddress(this->url);
+    this->agentQuerySub->addAddress(this->url);
+    this->agentAnnouncementSub->addAddress(this->url);
 
     // subscribing the subscribers:
     this->allocationAuthorityInfoSub->subscribe(&Communication::handleAllocationAuthority, &(*this));
@@ -104,6 +111,8 @@ Communication::Communication(alica::AlicaEngine* ae)
     this->syncReadySub->subscribe(&Communication::handleSyncReady, &(*this));
     this->syncTalkSub->subscribe(&Communication::handleSyncTalk, &(*this));
     this->solverResultSub->subscribe(&Communication::handleSolverResult, &(*this));
+    this->agentQuerySub->subscribe(&Communication::handleAgentQuery, &(*this));
+    this->agentAnnouncementSub->subscribe(&Communication::handleAgentAnnouncement, &(*this));
 }
 
 Communication::~Communication()
@@ -201,7 +210,8 @@ void Communication::sendSyncTalk(const alica::SyncTalk& st) const
     this->alicaPub->send(msgBuilder, this->syncTalkTopic);
 }
 
-void Communication::sendSolverResult(const alica::SolverResult& sr) const {
+void Communication::sendSolverResult(const alica::SolverResult& sr) const
+{
     if (!this->isRunning) {
         return;
     }
@@ -213,12 +223,38 @@ void Communication::sendSolverResult(const alica::SolverResult& sr) const {
     this->alicaPub->send(msgBuilder, this->solverResultTopic);
 }
 
+void Communication::sendAgentQuery(const alica::AgentQuery& aq) const
+{
+    if (!this->isRunning) {
+        return;
+    }
+    ::capnp::MallocMessageBuilder msgBuilder;
+    ContainerUtils::toMsg(aq, msgBuilder);
+#ifdef CAPNZERO_PROXY_DEBUG
+    std::cout << "Communication: Sending AQ: " << msgBuilder.getRoot<alica_msgs::AgentQuery>().toString().flatten().cStr() << '\n';
+#endif
+    this->alicaPub->send(msgBuilder, this->agentQueryTopic);
+}
+
+void Communication::sendAgentAnnouncement(const alica::AgentAnnouncement& aa) const
+{
+    if (!this->isRunning) {
+        return;
+    }
+    ::capnp::MallocMessageBuilder msgBuilder;
+    ContainerUtils::toMsg(aa, msgBuilder);
+#ifdef CAPNZERO_PROXY_DEBUG
+    std::cout << "Communication: Sending AQ: " << msgBuilder.getRoot<alica_msgs::AgentAnnouncement>().toString().flatten().cStr() << '\n';
+#endif
+    this->alicaPub->send(msgBuilder, this->agentAnnouncementTopic);
+}
+
 void Communication::handleAllocationAuthority(::capnp::FlatArrayMessageReader& msg)
 {
     if (!this->isRunning) {
         return;
     }
-    onAuthorityInfoReceived(ContainerUtils::toAllocationAuthorityInfo(msg, this->ae->getIdManager()));
+    onAuthorityInfoReceived(ContainerUtils::toAllocationAuthorityInfo(msg, this->idManager));
 }
 
 void Communication::handlePlanTreeInfo(::capnp::FlatArrayMessageReader& msg)
@@ -227,7 +263,7 @@ void Communication::handlePlanTreeInfo(::capnp::FlatArrayMessageReader& msg)
         return;
     }
     // NOTE: Didn't know how to create shared_ptr from a stack object, but why the hell is it a shared_ptr that the engine needs???
-    alica::PlanTreeInfo pti = ContainerUtils::toPlanTreeInfo(msg, this->ae->getIdManager());
+    alica::PlanTreeInfo pti = ContainerUtils::toPlanTreeInfo(msg, this->idManager);
     std::shared_ptr<alica::PlanTreeInfo> ptiPtr = std::make_shared<alica::PlanTreeInfo>();
     ptiPtr->senderID = pti.senderID;
     for (auto stateId : pti.stateIDs) {
@@ -245,7 +281,7 @@ void Communication::handleSyncReady(::capnp::FlatArrayMessageReader& msg)
         return;
     }
     auto srPtr = make_shared<alica::SyncReady>();
-    alica::SyncReady sr = ContainerUtils::toSyncReady(msg, this->ae->getIdManager());
+    alica::SyncReady sr = ContainerUtils::toSyncReady(msg, this->idManager);
     srPtr->senderID = sr.senderID;
     srPtr->synchronisationID = sr.synchronisationID;
     this->onSyncReadyReceived(srPtr);
@@ -257,7 +293,7 @@ void Communication::handleSyncTalk(::capnp::FlatArrayMessageReader& msg)
         return;
     }
     auto stPtr = make_shared<alica::SyncTalk>();
-    alica::SyncTalk st = ContainerUtils::toSyncTalk(msg, this->ae->getIdManager());
+    alica::SyncTalk st = ContainerUtils::toSyncTalk(msg, this->idManager);
     stPtr->senderID = st.senderID;
     for (auto sd : st.syncData) {
         stPtr->syncData.push_back(sd);
@@ -270,7 +306,23 @@ void Communication::handleSolverResult(::capnp::FlatArrayMessageReader& msg)
     if (!this->isRunning) {
         return;
     }
-    onSolverResult(ContainerUtils::toSolverResult(msg, this->ae->getIdManager()));
+    onSolverResult(ContainerUtils::toSolverResult(msg, this->idManager));
+}
+
+void Communication::handleAgentQuery(::capnp::FlatArrayMessageReader& msg)
+{
+    if (!this->isRunning) {
+        return;
+    }
+    onAgentQuery(ContainerUtils::toAgentQuery(msg, this->idManager));
+}
+
+void Communication::handleAgentAnnouncement(::capnp::FlatArrayMessageReader& msg)
+{
+    if (!this->isRunning) {
+        return;
+    }
+    onAgentAnnouncement(ContainerUtils::toAgentAnnouncement(msg, this->idManager));
 }
 
 void Communication::sendLogMessage(int level, const string& message) const

@@ -1,6 +1,8 @@
 #include "alica_capnzero_proxy/ContainerUtils.h"
 
 // Generated CapnProto Messages:
+#include "alica_msg/AgentAnnouncement.capnp.h"
+#include "alica_msg/AgentQuery.capnp.h"
 #include "alica_msg/AlicaEngineInfo.capnp.h"
 #include "alica_msg/AllocationAuthorityInfo.capnp.h"
 #include "alica_msg/PlanTreeInfo.capnp.h"
@@ -9,12 +11,11 @@
 #include "alica_msg/SyncReady.capnp.h"
 #include "alica_msg/SyncTalk.capnp.h"
 
-#include <essentials/IDManager.h>
 #include <essentials/WildcardID.h>
 
 namespace alica_capnzero_proxy
 {
-alica::AllocationAuthorityInfo ContainerUtils::toAllocationAuthorityInfo(::capnp::FlatArrayMessageReader& msg, essentials::IDManager* idManager)
+alica::AllocationAuthorityInfo ContainerUtils::toAllocationAuthorityInfo(::capnp::FlatArrayMessageReader& msg, essentials::IDManager& idManager)
 {
     alica_msgs::AllocationAuthorityInfo::Reader reader = msg.getRoot<alica_msgs::AllocationAuthorityInfo>();
 #ifdef CAPNZERO_PROXY_DEBUG
@@ -22,12 +23,12 @@ alica::AllocationAuthorityInfo ContainerUtils::toAllocationAuthorityInfo(::capnp
 #endif
 
     alica::AllocationAuthorityInfo aai;
-    aai.senderID = idManager->getIDFromBytes(
+    aai.senderID = idManager.getIDFromBytes(
             reader.getSenderId().getValue().asBytes().begin(), reader.getSenderId().getValue().size(), static_cast<uint8_t>(reader.getSenderId().getType()));
     aai.planId = reader.getPlanId();
     aai.planType = reader.getPlanType();
     aai.parentState = reader.getParentState();
-    aai.authority = idManager->getIDFromBytes(
+    aai.authority = idManager.getIDFromBytes(
             reader.getAuthority().getValue().asBytes().begin(), reader.getAuthority().getValue().size(), static_cast<uint8_t>(reader.getAuthority().getType()));
     ::capnp::List<alica_msgs::EntrypointRobots>::Reader entryPointRobots = reader.getEntrypointRobots();
     for (unsigned int i = 0; i < entryPointRobots.size(); ++i) {
@@ -40,21 +41,22 @@ alica::AllocationAuthorityInfo ContainerUtils::toAllocationAuthorityInfo(::capnp
         for (unsigned int j = 0; j < robots.size(); ++j) {
             // CapnProto uses uint16_t for enums, but we use uint8_t hopefully it works for us - otherwise we need a matching/translation via switch case
             aai.entryPointRobots[i].robots.push_back(
-                    idManager->getIDFromBytes(robots[j].getValue().asBytes().begin(), robots[j].getValue().size(), (uint8_t) robots[j].getType()));
+                    idManager.getIDFromBytes(robots[j].getValue().asBytes().begin(), robots[j].getValue().size(), (uint8_t) robots[j].getType()));
         }
     }
 
     return aai;
 }
 
-alica::AlicaEngineInfo ContainerUtils::toAlicaEngineInfo(::capnp::FlatArrayMessageReader& msg, essentials::IDManager* idManager) {
+alica::AlicaEngineInfo ContainerUtils::toAlicaEngineInfo(::capnp::FlatArrayMessageReader& msg, essentials::IDManager& idManager)
+{
     alica_msgs::AlicaEngineInfo::Reader reader = msg.getRoot<alica_msgs::AlicaEngineInfo>();
 #ifdef CAPNZERO_PROXY_DEBUG
     std::cout << "alica_capnzero_proxy::ContainerUtils: Received '" << reader.toString().flatten().cStr() << "'" << std::endl;
 #endif
 
     alica::AlicaEngineInfo aei;
-    aei.senderID = idManager->getIDFromBytes(
+    aei.senderID = idManager.getIDFromBytes(
             reader.getSenderId().getValue().asBytes().begin(), reader.getSenderId().getValue().size(), static_cast<uint8_t>(reader.getSenderId().getType()));
     aei.currentState = reader.getCurrentState();
     aei.masterPlan = reader.getMasterPlan();
@@ -63,12 +65,13 @@ alica::AlicaEngineInfo ContainerUtils::toAlicaEngineInfo(::capnp::FlatArrayMessa
     aei.currentPlan = reader.getCurrentPlan();
     ::capnp::List<capnzero::ID>::Reader agentIdsWithMe = reader.getAgentIdsWithMe();
     for (unsigned int i = 0; i < agentIdsWithMe.size(); ++i) {
-        aei.robotIDsWithMe.push_back(idManager->getIDFromBytes(agentIdsWithMe[i].getValue().asBytes().begin(), agentIdsWithMe[i].getValue().size(), (uint8_t) agentIdsWithMe[i].getType()));
+        aei.robotIDsWithMe.push_back(
+                idManager.getIDFromBytes(agentIdsWithMe[i].getValue().asBytes().begin(), agentIdsWithMe[i].getValue().size(), (uint8_t) agentIdsWithMe[i].getType()));
     }
     return aei;
 }
 
-alica::PlanTreeInfo ContainerUtils::toPlanTreeInfo(::capnp::FlatArrayMessageReader& msg, essentials::IDManager* idManager)
+alica::PlanTreeInfo ContainerUtils::toPlanTreeInfo(::capnp::FlatArrayMessageReader& msg, essentials::IDManager& idManager)
 {
     alica_msgs::PlanTreeInfo::Reader reader = msg.getRoot<alica_msgs::PlanTreeInfo>();
 #ifdef CAPNZERO_PROXY_DEBUG
@@ -76,7 +79,7 @@ alica::PlanTreeInfo ContainerUtils::toPlanTreeInfo(::capnp::FlatArrayMessageRead
 #endif
 
     alica::PlanTreeInfo pti;
-    pti.senderID = idManager->getIDFromBytes(
+    pti.senderID = idManager.getIDFromBytes(
             reader.getSenderId().getValue().asBytes().begin(), reader.getSenderId().getValue().size(), (uint8_t) reader.getSenderId().getType());
 
     ::capnp::List<int64_t>::Reader states = reader.getStateIds();
@@ -91,20 +94,20 @@ alica::PlanTreeInfo ContainerUtils::toPlanTreeInfo(::capnp::FlatArrayMessageRead
     return pti;
 }
 
-alica::SyncReady ContainerUtils::toSyncReady(capnp::FlatArrayMessageReader& msg, essentials::IDManager* idManager)
+alica::SyncReady ContainerUtils::toSyncReady(capnp::FlatArrayMessageReader& msg, essentials::IDManager& idManager)
 {
     alica_msgs::SyncReady::Reader reader = msg.getRoot<alica_msgs::SyncReady>();
 #ifdef CAPNZERO_PROXY_DEBUG
     std::cout << "alica_capnzero_proxy::ContainerUtils: Received '" << reader.toString().flatten().cStr() << "'" << std::endl;
 #endif
     alica::SyncReady sr;
-    sr.senderID = idManager->getIDFromBytes(
+    sr.senderID = idManager.getIDFromBytes(
             reader.getSenderId().getValue().asBytes().begin(), reader.getSenderId().getValue().size(), (uint8_t) reader.getSenderId().getType());
     sr.synchronisationID = reader.getSynchronisationId();
     return sr;
 }
 
-alica::SyncTalk ContainerUtils::toSyncTalk(capnp::FlatArrayMessageReader& msg, essentials::IDManager* idManager)
+alica::SyncTalk ContainerUtils::toSyncTalk(capnp::FlatArrayMessageReader& msg, essentials::IDManager& idManager)
 {
     alica_msgs::SyncTalk::Reader reader = msg.getRoot<alica_msgs::SyncTalk>();
 #ifdef CAPNZERO_PROXY_DEBUG
@@ -112,7 +115,7 @@ alica::SyncTalk ContainerUtils::toSyncTalk(capnp::FlatArrayMessageReader& msg, e
 #endif
 
     alica::SyncTalk st;
-    st.senderID = idManager->getIDFromBytes(
+    st.senderID = idManager.getIDFromBytes(
             reader.getSenderId().getValue().asBytes().begin(), reader.getSenderId().getValue().size(), (uint8_t) reader.getSenderId().getType());
     capnp::List<alica_msgs::SyncData>::Reader msgSyncData = reader.getSyncData();
     for (unsigned int i = 0; i < msgSyncData.size(); ++i) {
@@ -121,20 +124,20 @@ alica::SyncTalk ContainerUtils::toSyncTalk(capnp::FlatArrayMessageReader& msg, e
         st.syncData[i].ack = tmpSyncData.getAck();
         st.syncData[i].conditionHolds = tmpSyncData.getTransitionHolds();
         st.syncData[i].transitionID = tmpSyncData.getTransitionId();
-        st.syncData[i].robotID = idManager->getIDFromBytes(tmpSyncData.getRobotId().getValue().asBytes().begin(), tmpSyncData.getRobotId().getValue().size(),
+        st.syncData[i].agentID = idManager.getIDFromBytes(tmpSyncData.getRobotId().getValue().asBytes().begin(), tmpSyncData.getRobotId().getValue().size(),
                 (uint8_t) tmpSyncData.getRobotId().getType());
     }
     return st;
 }
 
-alica::SolverResult ContainerUtils::toSolverResult(capnp::FlatArrayMessageReader& msg, essentials::IDManager* idManager)
+alica::SolverResult ContainerUtils::toSolverResult(capnp::FlatArrayMessageReader& msg, essentials::IDManager& idManager)
 {
     alica_msgs::SolverResult::Reader reader = msg.getRoot<alica_msgs::SolverResult>();
 #ifdef CAPNZERO_PROXY_DEBUG
     std::cout << "alica_capnzero_proxy::ContainerUtils: Received '" << reader.toString().flatten().cStr() << "'" << std::endl;
 #endif
     alica::SolverResult solverResult;
-    solverResult.senderID = idManager->getIDFromBytes(
+    solverResult.senderID = idManager.getIDFromBytes(
             reader.getSenderId().getValue().asBytes().begin(), reader.getSenderId().getValue().size(), (uint8_t) reader.getSenderId().getType());
 
     capnp::List<alica_msgs::SolverVar>::Reader msgSolverVars = reader.getVars();
@@ -149,6 +152,46 @@ alica::SolverResult ContainerUtils::toSolverResult(capnp::FlatArrayMessageReader
         }
     }
     return solverResult;
+}
+
+alica::AgentQuery ContainerUtils::toAgentQuery(capnp::FlatArrayMessageReader& msg, essentials::IDManager& idManager)
+{
+    alica_msgs::AgentQuery::Reader reader = msg.getRoot<alica_msgs::AgentQuery>();
+#ifdef CAPNZERO_PROXY_DEBUG
+    std::cout << "alica_capnzero_proxy::ContainerUtils: Received '" << reader.toString().flatten().cStr() << "'" << std::endl;
+#endif
+    alica::AgentQuery agentQuery;
+    agentQuery.senderID = idManager.getIDFromBytes(
+            reader.getSenderId().getValue().asBytes().begin(), reader.getSenderId().getValue().size(), (uint8_t) reader.getSenderId().getType());
+
+    agentQuery.senderSdk = reader.getSenderSDK();
+    agentQuery.planHash = reader.getPlanHash();
+    return agentQuery;
+}
+
+alica::AgentAnnouncement ContainerUtils::toAgentAnnouncement(capnp::FlatArrayMessageReader &msg, essentials::IDManager& idManager)
+{
+    alica_msgs::AgentAnnouncement::Reader reader = msg.getRoot<alica_msgs::AgentAnnouncement>();
+#ifdef CAPNZERO_PROXY_DEBUG
+    std::cout << "alica_capnzero_proxy::ContainerUtils: Received '" << reader.toString().flatten().cStr() << "'" << std::endl;
+#endif
+    alica::AgentAnnouncement agentAnnouncement;
+    agentAnnouncement.senderID = idManager.getIDFromBytes(
+            reader.getSenderId().getValue().asBytes().begin(), reader.getSenderId().getValue().size(), (uint8_t) reader.getSenderId().getType());
+
+    agentAnnouncement.senderSdk = reader.getSenderSDK();
+    agentAnnouncement.planHash = reader.getPlanHash();
+    agentAnnouncement.senderName = reader.getSenderName();
+    agentAnnouncement.token = reader.getToken();
+    agentAnnouncement.roleId = reader.getRoleId();
+    capnp::List<alica_msgs::StringTuple>::Reader capabilities = reader.getCapabilities();
+    for (unsigned int i = 0; i < capabilities.size(); ++i) {
+        alica_msgs::StringTuple::Reader tmpCapability = capabilities[i];
+        agentAnnouncement.capabilities.emplace_back();
+        agentAnnouncement.capabilities[i].first = tmpCapability.getKey();
+        agentAnnouncement.capabilities[i].second = tmpCapability.getValue();
+    }
+    return agentAnnouncement;
 }
 
 void ContainerUtils::toMsg(alica::AllocationAuthorityInfo aai, ::capnp::MallocMessageBuilder& msgBuilder)
@@ -247,8 +290,8 @@ void ContainerUtils::toMsg(alica::SyncTalk st, ::capnp::MallocMessageBuilder& ms
         auto& ds = st.syncData[i];
         alica_msgs::SyncData::Builder tmpData = syncData[i];
         capnzero::ID::Builder tmpId = tmpData.initRobotId();
-        tmpId.setValue(kj::arrayPtr(ds.robotID->getRaw(), (unsigned int) ds.robotID->getSize()));
-        tmpId.setType(ds.robotID->getType());
+        tmpId.setValue(kj::arrayPtr(ds.agentID->getRaw(), (unsigned int) ds.agentID->getSize()));
+        tmpId.setType(ds.agentID->getType());
         tmpData.setAck(ds.ack);
         tmpData.setTransitionHolds(ds.conditionHolds);
         tmpData.setTransitionId(ds.transitionID);
@@ -267,6 +310,35 @@ void ContainerUtils::toMsg(alica::SolverResult sr, ::capnp::MallocMessageBuilder
         alica_msgs::SolverVar::Builder tmpVar = vars[i];
         tmpVar.setId(var.id);
         tmpVar.setValue(kj::arrayPtr(var.value, sizeof(var.value)));
+    }
+}
+
+void ContainerUtils::toMsg(alica::AgentQuery aq, ::capnp::MallocMessageBuilder& msgBuilder)
+{
+    alica_msgs::AgentQuery::Builder msg = msgBuilder.initRoot<alica_msgs::AgentQuery>();
+    capnzero::ID::Builder sender = msg.initSenderId();
+    sender.setValue(kj::arrayPtr(aq.senderID->getRaw(), (unsigned int) aq.senderID->getSize()));
+    sender.setType(aq.senderID->getType());
+    msg.setSenderSDK(aq.senderSdk);
+    msg.setPlanHash(aq.planHash);
+}
+
+void ContainerUtils::toMsg(alica::AgentAnnouncement aa, ::capnp::MallocMessageBuilder& msgBuilder)
+{
+    alica_msgs::AgentAnnouncement::Builder msg = msgBuilder.initRoot<alica_msgs::AgentAnnouncement>();
+    capnzero::ID::Builder sender = msg.initSenderId();
+    sender.setValue(kj::arrayPtr(aa.senderID->getRaw(), (unsigned int) aa.senderID->getSize()));
+    sender.setType(aa.senderID->getType());
+    msg.setSenderSDK(aa.senderSdk);
+    msg.setSenderName(aa.senderName);
+    msg.setPlanHash(aa.planHash);
+    msg.setRoleId(aa.roleId);
+    msg.setToken(aa.token);
+    ::capnp::List<::alica_msgs::StringTuple>::Builder capabilities = msg.initCapabilities((unsigned int)aa.capabilities.size());
+    for (unsigned int i = 0; i < aa.capabilities.size(); i++) {
+        ::alica_msgs::StringTuple::Builder stringTuple = capabilities[i];
+        stringTuple.setKey(aa.capabilities[i].first);
+        stringTuple.setValue(aa.capabilities[i].second);
     }
 }
 

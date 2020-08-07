@@ -11,10 +11,11 @@
 
 
 int main(int argc, char* argv[]) {
-    alica::AlicaEngine *ae = NULL;
-    alica_capnzero_proxy::Communication *com = new alica_capnzero_proxy::Communication(ae);
+    alica::AlicaEngine* ae = NULL;
+    essentials::IDManager* idManager = new essentials::IDManager();
+    alica_capnzero_proxy::Communication *com = new alica_capnzero_proxy::Communication(*ae, *idManager);
     com->startCommunication();
-    com->sendLogMessage(1, "\033[93mReciever test\n");
+    com->sendLogMessage(1, "Receiver test");
     while (true)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));

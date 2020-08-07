@@ -10,12 +10,13 @@ find_package(catkin REQUIRED COMPONENTS
   alica_engine
   capnzero
   id_capnzero
+  id_manager
 )
 
 catkin_package(
         INCLUDE_DIRS include ${catkin_INCLUDE_DIRS}
         LIBRARIES alica_capnzero_proxy alica_msgs
-        CATKIN_DEPENDS alica_engine capnzero id_capnzero
+        CATKIN_DEPENDS alica_engine capnzero id_capnzero id_manager
 )
 
 include_directories(
@@ -55,7 +56,7 @@ target_link_libraries(senderTest
     ${catkin_LIBRARIES}
 )
 
-add_executable(recieverTest src/RecieverTest.cpp)
+add_executable(recieverTest src/ReceiverTest.cpp)
 target_link_libraries(recieverTest
     ${PROJECT_NAME}
     ${catkin_LIBRARIES}

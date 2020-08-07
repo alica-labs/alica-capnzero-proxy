@@ -15,14 +15,14 @@
 #include <engine/containers/SyncReady.h>
 #include <engine/containers/SyncTalk.h>
 
-
 int main(int argc, char* argv[])
 {
-    alica::AlicaEngine *ae = NULL;
-    alica_capnzero_proxy::Communication *com = new alica_capnzero_proxy::Communication(ae);
+    alica::AlicaEngine* ae = NULL;
+    essentials::IDManager* idManager = new essentials::IDManager();
+    alica_capnzero_proxy::Communication *com = new alica_capnzero_proxy::Communication(*ae, *idManager);
     com->startCommunication();
     com->sendLogMessage(1, "Test");
-    essentials::IdentifierConstPtr own = essentials::IDManager().generateID(16);
+    essentials::IdentifierConstPtr own = idManager->generateID(16);
     alica::AllocationAuthorityInfo authorityInfo;
     authorityInfo.senderID = own;
     authorityInfo.authority = own;
@@ -56,7 +56,7 @@ int main(int argc, char* argv[])
     alica::SyncTalk st;
     st.senderID = own;
     st.syncData.push_back(alica::SyncData());
-    st.syncData.at(0).robotID = own;
+    st.syncData.at(0).agentID = own;
     st.syncData.at(0).transitionID = 15;
     st.syncData.at(0).conditionHolds = true;
     st.syncData.at(0).ack = false;
