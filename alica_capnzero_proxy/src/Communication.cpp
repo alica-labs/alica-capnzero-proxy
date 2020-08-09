@@ -10,6 +10,8 @@
 #include "alica_msg/SolverResult.capnp.h"
 #include "alica_msg/SyncReady.capnp.h"
 #include "alica_msg/SyncTalk.capnp.h"
+#include "alica_msg/AgentQuery.capnp.h"
+#include "alica_msg/AgentAnnouncement.capnp.h"
 
 #include <engine/AlicaEngine.h>
 #include <engine/containers/AlicaEngineInfo.h>
@@ -126,6 +128,8 @@ Communication::~Communication()
     delete this->syncReadySub;
     delete this->planTreeInfoSub;
     delete this->allocationAuthorityInfoSub;
+    delete this->agentQuerySub;
+    delete this->agentAnnouncementSub;
 
     // Delete zmq context:
     zmq_ctx_shutdown(this->ctx);
